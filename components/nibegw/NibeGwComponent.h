@@ -6,31 +6,29 @@
 #include <cstddef>
 #include <map>
 
-#include "esphome.h"
 #include "esphome/core/component.h"
 #include "esphome/core/gpio.h"
+#include "esphome/core/log.h"
 #include "esphome/components/uart/uart.h"
+#include "esphome/components/network/ip_address.h"
+#include "esphome/components/network/util.h"
 
 #include "NibeGw.h"
 
-#ifdef USE_ESP32
-#include <WiFi.h>
-#include "AsyncUDP.h"
-#endif
-
-#ifdef USE_ESP8266
-#include <ESP8266WiFi.h>
-#include "ESPAsyncUDP.h"
-#endif
+// ESP-IDF BSD sockets
+#include "lwip/sockets.h"
+#include "lwip/inet.h"
+#include "lwip/ip_addr.h"
+#include <fcntl.h>
 
 namespace esphome {
 namespace nibegw {
 
-typedef std::tuple<uint16_t, byte> request_key_type;
-typedef std::vector<byte> request_data_type;
-typedef std::function<request_data_type(void)> request_provider_type;
-typedef std::tuple<network::IPAddress, int> target_type;
-typedef std::function<void(const request_data_type &)> message_listener_type;
+using request_key_type = std::tuple<uint16_t, uint8_t>;
+using request_data_type = std::vector<uint8_t>;
+using request_provider_type = std::function<request_data_type(void)>;
+using target_type = std::tuple<network::IPAddress, int>;
+using message_listener_type = std::function<void(const request_data_type &)>;
 
 class NibeGwComponent : public esphome::Component, public esphome::uart::UARTDevice {
   float get_setup_priority() const override {
@@ -51,14 +49,17 @@ class NibeGwComponent : public esphome::Component, public esphome::uart::UARTDev
 
   NibeGw *gw_;
 
-  AsyncUDP udp_read_;
-  AsyncUDP udp_write_;
+  // ESP-IDF BSD sockets
+  int udp_read_fd_ = -1;
+  int udp_write_fd_ = -1;
 
-  void callback_msg_received(const byte *const data, int len);
-  int callback_msg_token_received(uint16_t address, byte command, byte *data);
-  void callback_debug(byte verbose, char *data);
+  void callback_msg_received(const uint8_t *data, int len);
+  int callback_msg_token_received(uint16_t address, uint8_t command, uint8_t *data);
+  void callback_debug(uint8_t verbose, char *data);
 
-  void token_request_cache(AsyncUDPPacket &udp, byte address, byte token);
+  void handle_udp_packet(const uint8_t *data, int len, const network::IPAddress &from_ip, uint8_t address,
+                         uint8_t token);
+  bool is_source_ip_allowed(const network::IPAddress &ip);
 
  public:
   void set_read_port(int port) {

@@ -1,5 +1,6 @@
 from operator import xor
 from functools import reduce
+from typing import Any, Type
 
 import esphome.config_validation as cv
 import esphome.codegen as cg
@@ -7,7 +8,7 @@ from esphome.const import CONF_ID
 from esphome import pins
 from esphome.core import CORE
 from esphome.components.network import IPAddress
-from enum import IntEnum, Enum
+from enum import IntEnum
 from esphome.components import uart
 
 AUTO_LOAD = ["sensor", "climate"]
@@ -51,13 +52,14 @@ class Token(IntEnum):
   ACCESSORY = 0xEE
 
 
-def addresses_string(value):
+def addresses_string(value: str) -> int:
     try:
         return Addresses[value].value
     except KeyError:
         raise ValueError(f"{value} is not a valid member of Address")
 
-def real_enum(enum: Enum):
+def real_enum(enum: Type[IntEnum]) -> Any:
+    """Convert IntEnum to ESPHome enum validator."""
     return cv.enum({i.name: i.value for i in enum})
 
 CONSTANTS_SCHEMA = cv.Schema(
@@ -72,35 +74,36 @@ CONSTANTS_SCHEMA = cv.Schema(
 TARGET_SCHEMA = cv.Schema(
     {
         cv.Required(CONF_TARGET_IP): cv.ipv4address,
-        cv.Optional(CONF_TARGET_PORT, default=9999): cv.port,
+        cv.Optional(CONF_TARGET_PORT): cv.port,
     }
 )
 
 UDP_SCHEMA = cv.Schema(
     {
-        cv.Required(CONF_TARGET, []): cv.ensure_list(TARGET_SCHEMA),
-        cv.Optional(CONF_READ_PORT, default=9999): cv.port,
-        cv.Optional(CONF_WRITE_PORT, default=10000): cv.port,
-        cv.Optional(CONF_SOURCE, []): cv.ensure_list(cv.ipv4address)
+        cv.Required(CONF_TARGET): cv.ensure_list(TARGET_SCHEMA),
+        cv.Optional(CONF_READ_PORT): cv.port,
+        cv.Optional(CONF_WRITE_PORT): cv.port,
+        cv.Optional(CONF_SOURCE): cv.ensure_list(cv.ipv4address)
     }
 )
 
 CONFIG_SCHEMA = cv.Schema(
     {
         cv.GenerateID(): cv.declare_id(NibeGwComponent),
-        cv.Optional(CONF_ACKNOWLEDGE, default=[]): [cv.Any(addresses_string, cv.Coerce(int))],
+        cv.Optional(CONF_ACKNOWLEDGE): [cv.Any(addresses_string, cv.Coerce(int))],
         cv.Required(CONF_UDP): UDP_SCHEMA,
         cv.Optional(CONF_DIR_PIN): pins.gpio_output_pin_schema,
-        cv.Optional(CONF_CONSTANTS, default=[]): cv.ensure_list(CONSTANTS_SCHEMA)
+        cv.Optional(CONF_CONSTANTS): cv.ensure_list(CONSTANTS_SCHEMA)
     }
 ).extend(cv.COMPONENT_SCHEMA).extend(uart.UART_DEVICE_SCHEMA)
 
 
-async def to_code(config):
+async def to_code(config: dict[str, Any]) -> None:
+    dir_pin_data: Any
     if dir_pin := config.get(CONF_DIR_PIN):
         dir_pin_data = await cg.gpio_pin_expression(dir_pin)
     else:
-        dir_pin_data = 0
+        dir_pin_data = cg.nullptr
 
     var = cg.new_Pvariable(
         config[CONF_ID],
@@ -109,29 +112,33 @@ async def to_code(config):
     await cg.register_component(var, config)
     await uart.register_uart_device(var, config)
 
+    # ESP-IDF specific build flags
     if CORE.is_esp32:
         cg.add_build_flag("-DHARDWARE_SERIAL_WITH_PINS")
-        cg.add_library("ESP32 Async UDP", None)
-
-    if CORE.is_esp8266:
-        cg.add_build_flag("-DHARDWARE_SERIAL")
-        cg.add_library("ESPAsyncUDP", None)
 
     if udp := config.get(CONF_UDP):
-        for target in udp[CONF_TARGET]:
-            cg.add(var.add_target(IPAddress(str(target[CONF_TARGET_IP])), target[CONF_TARGET_PORT]))
-        cg.add(var.set_read_port(udp[CONF_READ_PORT]))
-        cg.add(var.set_write_port(udp[CONF_WRITE_PORT]))
-        for source in udp[CONF_SOURCE]:
+        # Set defaults if not provided
+        targets = udp.get(CONF_TARGET, [])
+        read_port = udp.get(CONF_READ_PORT, 9999)
+        write_port = udp.get(CONF_WRITE_PORT, 10000)
+        sources = udp.get(CONF_SOURCE, [])
+        
+        for target in targets:
+            target_port = target.get(CONF_TARGET_PORT, 9999)
+            cg.add(var.add_target(IPAddress(str(target[CONF_TARGET_IP])), target_port))
+        cg.add(var.set_read_port(read_port))
+        cg.add(var.set_write_port(write_port))
+        for source in sources:
             cg.add(var.add_source_ip(IPAddress(str(source))))
 
-    if config[CONF_ACKNOWLEDGE]:
-        for address in config[CONF_ACKNOWLEDGE]:
+    acknowledge_list = config.get(CONF_ACKNOWLEDGE, [])
+    if acknowledge_list:
+        for address in acknowledge_list:
             cg.add(
                 var.gw().setAcknowledge(address, True)
             )
 
-    def xor8(data: bytes) -> int:
+    def xor8(data: list[int]) -> int:
         chksum = reduce(xor, data)
         if chksum == 0x5C:
             chksum = 0xC5
@@ -148,13 +155,24 @@ async def to_code(config):
         packet.append(xor8(packet))
         return packet
 
-    for request in config[CONF_CONSTANTS]:
-        data = generate_request(
-            request.get(CONF_COMMAND, request[CONF_TOKEN]).enum_value,
-            request[CONF_DATA]
+    def get_enum_value(value: Any, enum_class: Type[IntEnum]) -> int:
+        """Convert string name, enum, or int to integer value."""
+        if isinstance(value, str):
+            return enum_class[value].value
+        elif hasattr(value, 'value'):
+            return value.value
+        else:
+            return int(value)
+
+    constants_list = config.get(CONF_CONSTANTS, [])
+    for request in constants_list:
+        address_int = get_enum_value(request[CONF_ADDRESS], Addresses)
+        token_int = get_enum_value(request[CONF_TOKEN], Token)
+        command_int = get_enum_value(
+            request.get(CONF_COMMAND, request[CONF_TOKEN]), 
+            Token
         )
-        cg.add(var.set_request(
-            request[CONF_ADDRESS],
-            request[CONF_TOKEN],
-            data
-        ))
+        
+        data_list = generate_request(command_int, request[CONF_DATA])
+        
+        cg.add(var.set_request(address_int, token_int, data_list))

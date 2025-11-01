@@ -1,0 +1,106 @@
+esphome:
+  name: nibe-test
+  friendly_name: Nibe Gateway Test
+
+# ESP32-C3 with ESP-IDF framework
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: esp-idf
+
+# Logger - disable UART output since we're using those pins for RS-485
+logger:
+  level: INFO
+  baud_rate: 0  # Disable serial logging
+
+# API for Home Assistant integration
+api:
+  encryption:
+    key: "2lI2IdcpdnfgnWVvbeKgzif4CiigICQROTSJeDWXCcw="
+
+# OTA updates
+ota:
+  platform: esphome
+  password: "f23655272255c726eb297d589f858a57"
+
+# Wired Ethernet via DM9051 SPI module
+ethernet:
+  type: DM9051
+  clk_pin: GPIO7
+  mosi_pin: GPIO10
+  miso_pin: GPIO3
+  cs_pin: GPIO9
+  interrupt_pin: GPIO8
+  reset_pin: GPIO6
+  clock_speed: 8MHz
+  manual_ip:
+    static_ip: 192.168.0.34
+    gateway: 192.168.0.1
+    subnet: 255.255.255.0
+    dns1: 192.168.0.1
+  use_address: 192.168.0.34
+
+# UART for RS-485 connection to heat pump
+uart:
+  id: nibe_uart
+  rx_pin: GPIO21
+  tx_pin: GPIO20
+  baud_rate: 9600
+
+# NibeGW component - local development version
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components: [nibegw]
+    refresh: 0s
+
+nibegw:
+  uart_id: nibe_uart
+  
+  # RS-485 direction control pin (for MAX485, not needed for MAX3485)
+  dir_pin:
+    number: GPIO19
+    inverted: false
+  
+  # UDP configuration
+  udp:
+    # Target to send heat pump data to (your monitoring server)
+    target:
+      - ip: 192.168.0.4
+        port: 9999
+    
+    # Only accept requests from this IP (security)
+    source:
+      - 192.168.0.4
+    
+    # Ports for read/write requests
+    read_port: 9999
+    write_port: 10000
+  
+  # Acknowledge MODBUS40 messages (required to prevent heat pump alarm)
+  acknowledge:
+    - MODBUS40
+  
+  # Constants - required responses
+  constants:
+    # MODBUS40 accessory version
+    - address: MODBUS40
+      token: ACCESSORY
+      data: [0x0A, 0x00, 0x01]
+
+# Optional: System status sensors
+sensor:
+  - platform: uptime
+    name: "Uptime"
+    
+# Optional: Text sensors
+text_sensor:
+  - platform: ethernet_info
+    ip_address:
+      name: "IP Address"
+
+# Optional: Binary sensors
+binary_sensor:
+  - platform: status
+    name: "Status"

@@ -1,0 +1,74 @@
+{
+    // Python interpreter - works on Windows, Linux, macOS
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+    
+    // Python analysis
+    "python.analysis.diagnosticMode": "workspace",
+    "python.analysis.typeCheckingMode": "basic",
+    
+    // C++ configuration
+    "C_Cpp.default.cppStandard": "c++11",
+    "C_Cpp.default.cStandard": "c11",
+    "C_Cpp.default.compilerPath": "/usr/bin/g++",
+    "C_Cpp.default.includePath": [
+        "${workspaceFolder}/**",
+        "${workspaceFolder}/components/**"
+    ],
+    
+    // File associations
+    "files.associations": {
+        "*.yaml": "yaml",
+        "*.h": "cpp",
+        "*.cpp": "cpp"
+    },
+    
+    // Editor settings
+    "editor.formatOnSave": false,
+    "editor.rulers": [120],
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true,
+    
+    // File-specific settings
+    "[cpp]": {
+        "editor.tabSize": 2,
+        "editor.formatOnSave": true
+    },
+    
+    "[python]": {
+        "editor.tabSize": 4,
+        "editor.formatOnSave": true
+    },
+    
+    "[yaml]": {
+        "editor.tabSize": 2,
+        "editor.insertSpaces": true
+    },
+    
+    // Files to exclude from explorer
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/*.pyc": true,
+        ".esphome": true,
+        ".pio": true,
+        ".venv": false  // Show .venv folder
+    },
+    
+    // Search exclusions
+    "search.exclude": {
+        "**/.esphome": true,
+        "**/.pio": true,
+        "**/.venv": true,
+        "**/node_modules": true
+    },
+    
+    // Terminal
+    "terminal.integrated.env.linux": {
+        "PYTHONPATH": "${workspaceFolder}"
+    },
+    "terminal.integrated.env.osx": {
+        "PYTHONPATH": "${workspaceFolder}"
+    },
+    "terminal.integrated.env.windows": {
+        "PYTHONPATH": "${workspaceFolder}"
+    }
+}

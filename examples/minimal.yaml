@@ -1,0 +1,46 @@
+esphome:
+  name: nibe-minimal
+  friendly_name: Nibe Gateway Minimal
+
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: esp-idf
+
+logger:
+  baud_rate: 0
+
+api:
+
+ota:
+  platform: esphome
+
+ethernet:
+  type: DM9051
+  clk_pin: GPIO7
+  mosi_pin: GPIO10
+  miso_pin: GPIO3
+  cs_pin: GPIO9
+  interrupt_pin: GPIO8
+  reset_pin: GPIO6
+
+uart:
+  rx_pin: GPIO21
+  tx_pin: GPIO20
+  baud_rate: 9600
+
+external_components:
+  - source:
+      type: git
+      url: https://github.com/yourusername/esphome-nibe-idf.git
+    components: [nibegw]
+
+nibegw:
+  dir_pin: GPIO19
+  udp:
+    target:
+      - ip: 192.168.1.100
+    source:
+      - 192.168.1.100
+  acknowledge:
+    - MODBUS40

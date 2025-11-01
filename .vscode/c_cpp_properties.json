@@ -1,0 +1,86 @@
+{
+  "configurations": [
+    {
+      "name": "Win32",
+      "includePath": [
+        "${workspaceFolder}/**",
+        "${workspaceFolder}/.esphome/build/**/src/**",
+        "${userProfile}/.platformio/packages/framework-espidf/components/**",
+        "${userProfile}/.platformio/packages/toolchain-*/*/include/**"
+      ],
+      "browse": {
+        "path": [
+          "${workspaceFolder}",
+          "${userProfile}/.platformio/packages/framework-espidf"
+        ],
+        "limitSymbolsToIncludedHeaders": true
+      },
+      "defines": [
+        "ESPHOME_LOG_LEVEL=ESPHOME_LOG_LEVEL_DEBUG",
+        "USE_ESP_IDF",
+        "USE_ETHERNET",
+        "ESP_PLATFORM",
+        "IDF_VER=\"v5.1\""
+      ],
+      "compilerPath": "${userProfile}/.platformio/packages/toolchain-riscv32-esp/bin/riscv32-esp-elf-g++.exe",
+      "cStandard": "c11",
+      "cppStandard": "gnu++17",
+      "intelliSenseMode": "gcc-x64"
+    },
+    {
+      "name": "Linux",
+      "includePath": [
+        "${workspaceFolder}/**",
+        "${workspaceFolder}/.esphome/build/**/src/**",
+        "${env:HOME}/.platformio/packages/framework-espidf/components/**",
+        "${env:HOME}/.platformio/packages/toolchain-*/*/include/**"
+      ],
+      "browse": {
+        "path": [
+          "${workspaceFolder}",
+          "${env:HOME}/.platformio/packages/framework-espidf"
+        ],
+        "limitSymbolsToIncludedHeaders": true
+      },
+      "defines": [
+        "ESPHOME_LOG_LEVEL=ESPHOME_LOG_LEVEL_DEBUG",
+        "USE_ESP_IDF",
+        "USE_ETHERNET",
+        "ESP_PLATFORM",
+        "IDF_VER=\"v5.1\""
+      ],
+      "compilerPath": "${env:HOME}/.platformio/packages/toolchain-riscv32-esp/bin/riscv32-esp-elf-g++",
+      "cStandard": "c11",
+      "cppStandard": "gnu++17",
+      "intelliSenseMode": "gcc-x64"
+    },
+    {
+      "name": "Mac",
+      "includePath": [
+        "${workspaceFolder}/**",
+        "${workspaceFolder}/.esphome/build/**/src/**",
+        "${env:HOME}/.platformio/packages/framework-espidf/components/**",
+        "${env:HOME}/.platformio/packages/toolchain-*/*/include/**"
+      ],
+      "browse": {
+        "path": [
+          "${workspaceFolder}",
+          "${env:HOME}/.platformio/packages/framework-espidf"
+        ],
+        "limitSymbolsToIncludedHeaders": true
+      },
+      "defines": [
+        "ESPHOME_LOG_LEVEL=ESPHOME_LOG_LEVEL_DEBUG",
+        "USE_ESP_IDF",
+        "USE_ETHERNET",
+        "ESP_PLATFORM",
+        "IDF_VER=\"v5.1\""
+      ],
+      "compilerPath": "${env:HOME}/.platformio/packages/toolchain-riscv32-esp/bin/riscv32-esp-elf-g++",
+      "cStandard": "c11",
+      "cppStandard": "gnu++17",
+      "intelliSenseMode": "gcc-x64"
+    }
+  ],
+  "version": 4
+}

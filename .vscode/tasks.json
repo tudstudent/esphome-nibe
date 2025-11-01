@@ -1,0 +1,123 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "ESPHome: Compile Test Config",
+            "type": "shell",
+            "command": "${workspaceFolder}/.venv/bin/esphome",
+            "args": [
+                "compile",
+                "${workspaceFolder}/examples/test-compile.yaml"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "ESPHome: Clean Build",
+            "type": "shell",
+            "command": "${workspaceFolder}/.venv/bin/esphome",
+            "args": [
+                "clean",
+                "${workspaceFolder}/examples/test-compile.yaml"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "ESPHome: Show Logs",
+            "type": "shell",
+            "command": "${workspaceFolder}/.venv/bin/esphome",
+            "args": [
+                "logs",
+                "${workspaceFolder}/examples/test-compile.yaml"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Format: clang-format (All C++)",
+            "type": "shell",
+            "command": "clang-format",
+            "args": [
+                "-i",
+                "${workspaceFolder}/components/nibegw/*.cpp",
+                "${workspaceFolder}/components/nibegw/*.h"
+            ],
+            "presentation": {
+                "reveal": "silent",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Format: black (Python)",
+            "type": "shell",
+            "command": "${workspaceFolder}/.venv/bin/black",
+            "args": [
+                "${workspaceFolder}/components/nibegw/"
+            ],
+            "presentation": {
+                "reveal": "silent",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Lint: Python",
+            "type": "shell",
+            "command": "${workspaceFolder}/.venv/bin/python",
+            "args": [
+                "-m",
+                "flake8",
+                "${workspaceFolder}/components/nibegw/"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Setup: Create venv",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "-m",
+                "venv",
+                "${workspaceFolder}/.venv"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Setup: Install ESPHome",
+            "type": "shell",
+            "command": "${workspaceFolder}/.venv/bin/pip",
+            "args": [
+                "install",
+                "esphome"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        }
+    ]
+}

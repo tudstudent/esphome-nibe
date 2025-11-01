@@ -1,1 +1,64 @@
-*.pyc
+# Python virtual environment
+.venv/
+venv/
+env/
+ENV/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# ESPHome specific
+.esphome/
+*.bin
+*.elf
+*.map
+
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# IDE - Keep .vscode/ for shared settings but exclude user-specific files
+.vscode/*.json.user
+.vscode/settings.json.user
+.vscode/.browse.VC.db*
+.vscode/ipch/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Secrets (if you use secrets.yaml)
+secrets.yaml
+secrets*.yaml
+
+# User-specific configs (keep examples/ but not user configs in root)
+*-local.yaml
+*-test-local.yaml
+my-*.yaml
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS specific
+Thumbs.db
