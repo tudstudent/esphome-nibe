@@ -4,7 +4,7 @@
 
 [![ESPHome](https://img.shields.io/badge/ESPHome-2024.x-blue.svg)](https://esphome.io/)
 [![Framework](https://img.shields.io/badge/Framework-ESP--IDF-green.svg)](https://docs.espressif.com/projects/esp-idf/)
-[![License](https://img.shields.io/badge/License-GPL--3.0-orange.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ## 🎯 What This Fork Adds
 
@@ -280,7 +280,7 @@ Contributions welcome! Please:
 
 ## 📜 License
 
-GPL-3.0 License - Same as original elupus/esphome-nibe
+MIT License - Same as original elupus/esphome-nibe
 
 ## 🙏 Credits
 
