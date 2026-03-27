@@ -1,0 +1,521 @@
+# ==============================================================================
+# ESPHome Nibe Gateway - F1155 + PCM42 (4-pipe passive cooling)
+# ==============================================================================
+# Hardware: ESP32-C3-DevKitM-1 + DM9051 Ethernet Module
+# Framework: ESP-IDF (required for Ethernet support)
+# Features: Direct MQTT sensor publishing + web dashboard
+# ==============================================================================
+
+esphome:
+  name: esp32-mqtt-nibe
+  friendly_name: Nibe F1155 Gateway
+
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: esp-idf
+
+# ==============================================================================
+# Logging
+# ==============================================================================
+logger:
+  baud_rate: 0  # UART used for heat pump RS-485
+
+# ==============================================================================
+# MQTT (direct coil publishing + HA auto-discovery)
+# ==============================================================================
+mqtt:
+  broker: !secret mqtt_broker
+  port: 1883
+  username: !secret mqtt_username
+  password: !secret mqtt_password
+  discovery: true
+
+# ==============================================================================
+# Web Dashboard (live sensor values at http://192.168.0.32)
+# ==============================================================================
+web_server:
+  port: 80
+
+# ==============================================================================
+# OTA Updates
+# ==============================================================================
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+# ==============================================================================
+# Wired Ethernet (DM9051 SPI)
+# ==============================================================================
+ethernet:
+  type: DM9051
+  clk_pin: GPIO7
+  mosi_pin: GPIO10
+  miso_pin: GPIO3
+  cs_pin: GPIO9
+  interrupt_pin: GPIO8
+  reset_pin: GPIO6
+  manual_ip:
+    static_ip: 192.168.0.32
+    gateway: 192.168.0.1
+    subnet: 255.255.255.0
+    dns1: 192.168.0.1
+
+# ==============================================================================
+# External Components
+# ==============================================================================
+external_components:
+  - source:
+      type: git
+      url: https://github.com/elupus/esphome-nibe.git
+    components: [ nibegw ]
+
+# ==============================================================================
+# UART (RS-485 to Heat Pump)
+# ==============================================================================
+uart:
+  id: my_uart
+  rx_pin: GPIO5
+  tx_pin: GPIO2
+  baud_rate: 9600
+
+# ==============================================================================
+# Nibe Gateway - F1155 + PCM42 Configuration
+# ==============================================================================
+nibegw:
+  acknowledge:
+    - MODBUS40
+
+  constants:
+    - address: MODBUS40
+      token: ACCESSORY
+      data: [0x0A, 0x00, 0x01]
+
+  # ── UDP disabled (using direct MQTT instead) ──
+  udp:
+    enabled: false
+
+  # ── Direct sensor polling → MQTT ──
+  sensors:
+    enabled: true
+    poll_interval: 30s
+    poll_groups:
+      - id: fast
+        interval: 10s
+      - id: slow
+        interval: 120s
+    buffer_size: 8192
+    buffer_mode: latest_only
+
+    coils:
+      # ── Outdoor & Climate ──
+      - name: "BT1 Outdoor Temperature"
+        address: 40004
+        size: s16
+        factor: 10
+        unit_of_measurement: "°C"
+        device_class: temperature
+        accuracy_decimals: 1
+        poll_group: fast
+      - name: "BT1 Average"
+        address: 40067
+        size: s16
+        factor: 10
+        unit_of_measurement: "°C"
+        device_class: temperature
+        accuracy_decimals: 1
+      - name: "BT1 Average 1h"
+        address: 40185
+        size: s16
+        factor: 10
+        unit_of_measurement: "°C"
+        device_class: temperature
+        accuracy_decimals: 1
+        poll_group: slow
+
+      # ── Heating System S1 ──
+      - name: "BT2 Supply Temp S1"
+        address: 40008
+        size: s16
+        factor: 10
+        unit_of_measurement: "°C"
+        device_class: temperature
+        accuracy_decimals: 1
+      - name: "BT3 Return Temp"
+        address: 40012
+        size: s16
+        factor: 10
+        unit_of_measurement: "°C"
+        device_class: temperature
+        accuracy_decimals: 1
+      - name: "BT25 Ext. Supply"
+        address: 40071
+        size: s16
+        factor: 10
+        unit_of_measurement: "°C"
+        device_class: temperature
+        accuracy_decimals: 1
+      - name: "BT50 Room Temp S1"
+        address: 40033
+        size: s16
+        factor: 10
+        unit_of_measurement: "°C"
+        device_class: temperature
+        accuracy_decimals: 1
+      - name: "BT50 Room Temp S1 Average"
+        address: 40195
+        size: s16
+        factor: 10
+        unit_of_measurement: "°C"
+        device_class: temperature
+        accuracy_decimals: 1
+        poll_group: slow
+      - name: "Calc. Supply S1"
+        address: 43009
+        size: s16
+        factor: 10
+        unit_of_measurement: "°C"
+        device_class: temperature
+        accuracy_decimals: 1
+
+      # ── Hot Water ──
+      - name: "BT7 HW Top"
+        address: 40013
+        size: s16
+        factor: 10
+        unit_of_measurement: "°C"
+        device_class: temperature
+        accuracy_decimals: 1
+        poll_group: fast
+      - name: "BT6 HW Load"
+        address: 40014
+        size: s16
+        factor: 10
+        unit_of_measurement: "°C"
+        device_class: temperature
+        accuracy_decimals: 1
+        poll_group: fast
+      - name: "BT70 HW Comfort Supply"
+        address: 40147
+        size: s16
+        factor: 10
+        unit_of_measurement: "°C"
+        device_class: temperature
+        accuracy_decimals: 1
+
+      # ── Refrigerant Circuit ──
+      - name: "BT10 Brine In Temp"
+        address: 40015
+        size: s16
+        factor: 10
+        unit_of_measurement: "°C"
+        device_class: temperature
+        accuracy_decimals: 1
+      - name: "BT11 Brine Out Temp"
+        address: 40016
+        size: s16
+        factor: 10
+        unit_of_measurement: "°C"
+        device_class: temperature
+        accuracy_decimals: 1
+      - name: "BT12 Condensor Out"
+        address: 40017
+        size: s16
+        factor: 10
+        unit_of_measurement: "°C"
+        device_class: temperature
+        accuracy_decimals: 1
+      - name: "BT14 Hot Gas Temp"
+        address: 40018
+        size: s16
+        factor: 10
+        unit_of_measurement: "°C"
+        device_class: temperature
+        accuracy_decimals: 1
+      - name: "BT15 Liquid Line"
+        address: 40019
+        size: s16
+        factor: 10
+        unit_of_measurement: "°C"
+        device_class: temperature
+        accuracy_decimals: 1
+      - name: "BT17 Suction"
+        address: 40022
+        size: s16
+        factor: 10
+        unit_of_measurement: "°C"
+        device_class: temperature
+        accuracy_decimals: 1
+      - name: "BT29 Cpr Oil Temp"
+        address: 40146
+        size: s16
+        factor: 10
+        unit_of_measurement: "°C"
+        device_class: temperature
+        accuracy_decimals: 1
+      - name: "Inverter Temperature"
+        address: 43140
+        size: s16
+        factor: 10
+        unit_of_measurement: "°C"
+        device_class: temperature
+        accuracy_decimals: 1
+
+      # ── Cooling (PCM42 4-pipe) ──
+      - name: "BT64 Cool Supply Temp"
+        address: 40045
+        size: s16
+        factor: 10
+        unit_of_measurement: "°C"
+        device_class: temperature
+        accuracy_decimals: 1
+      - name: "BT65 Cool Return Temp"
+        address: 40046
+        size: s16
+        factor: 10
+        unit_of_measurement: "°C"
+        device_class: temperature
+        accuracy_decimals: 1
+      - name: "BT25 Ext. Supply Cooling"
+        address: 40216
+        size: s16
+        factor: 10
+        unit_of_measurement: "°C"
+        device_class: temperature
+        accuracy_decimals: 1
+      - name: "BT64 Average"
+        address: 40889
+        size: s16
+        factor: 10
+        unit_of_measurement: "°C"
+        device_class: temperature
+        accuracy_decimals: 1
+        poll_group: slow
+      - name: "Calc. Cooling Supply S1"
+        address: 44270
+        size: s16
+        factor: 10
+        unit_of_measurement: "°C"
+        device_class: temperature
+        accuracy_decimals: 1
+      - name: "Status Cooling"
+        address: 43024
+        size: u8
+        factor: 1
+      - name: "State ACS"
+        address: 44276
+        size: u8
+        factor: 1
+      - name: "QN18 State ACS Cool Dump"
+        address: 44278
+        size: u8
+        factor: 1
+      - name: "QN25 State ACS Heat Dump"
+        address: 44277
+        size: u8
+        factor: 1
+      - name: "QN12 ACS Valve"
+        address: 44751
+        size: u8
+        factor: 1
+      - name: "Passive Cool Shunt"
+        address: 44753
+        size: u8
+        factor: 1
+
+      # ── Compressor ──
+      - name: "Compressor Frequency Actual"
+        address: 43136
+        size: u16
+        factor: 10
+        unit_of_measurement: "Hz"
+        accuracy_decimals: 1
+        poll_group: fast
+      - name: "Compressor Frequency Target"
+        address: 43182
+        size: u16
+        factor: 1
+        unit_of_measurement: "Hz"
+      - name: "Compressor In Power"
+        address: 43141
+        size: u16
+        factor: 100
+        unit_of_measurement: "kW"
+        device_class: power
+        accuracy_decimals: 2
+      - name: "Compressor Current"
+        address: 43147
+        size: s16
+        factor: 1
+        unit_of_measurement: "A"
+        device_class: current
+      - name: "Compressor State EP14"
+        address: 43427
+        size: u8
+        factor: 1
+      - name: "Compressor Starts"
+        address: 43416
+        size: s32
+        factor: 1
+        poll_group: slow
+      - name: "Tot. Op Time Compressor"
+        address: 43420
+        size: s32
+        factor: 1
+        unit_of_measurement: "h"
+        device_class: duration
+        poll_group: slow
+      - name: "Tot. HW Op Time Compressor"
+        address: 43424
+        size: s32
+        factor: 1
+        unit_of_measurement: "h"
+        device_class: duration
+        poll_group: slow
+
+      # ── Flow & Pumps ──
+      - name: "BF1 EP14 Flow"
+        address: 40072
+        size: s16
+        factor: 10
+        unit_of_measurement: "l/m"
+        accuracy_decimals: 1
+      - name: "Supply Pump Speed EP14"
+        address: 43437
+        size: u8
+        factor: 1
+        unit_of_measurement: "%"
+      - name: "Supply Pump State EP14"
+        address: 43431
+        size: u8
+        factor: 1
+      - name: "Brine Pump State EP14"
+        address: 43433
+        size: u8
+        factor: 1
+      - name: "GP2 Brine Pump Status EP14"
+        address: 43439
+        size: u8
+        factor: 1
+        unit_of_measurement: "%"
+      - name: "Brine Pump dT Actual"
+        address: 44910
+        size: s16
+        factor: 10
+        accuracy_decimals: 1
+      - name: "Brine Pump dT Set Point"
+        address: 44911
+        size: s16
+        factor: 10
+        accuracy_decimals: 1
+
+      # ── Electrical ──
+      - name: "BE1 Current Phase 1"
+        address: 40083
+        size: u32
+        factor: 10
+        unit_of_measurement: "A"
+        device_class: current
+        accuracy_decimals: 1
+      - name: "BE2 Current Phase 2"
+        address: 40081
+        size: u32
+        factor: 10
+        unit_of_measurement: "A"
+        device_class: current
+        accuracy_decimals: 1
+      - name: "BE3 Current Phase 3"
+        address: 40079
+        size: u32
+        factor: 10
+        unit_of_measurement: "A"
+        device_class: current
+        accuracy_decimals: 1
+      - name: "Int. El. Add. Power"
+        address: 43084
+        size: s16
+        factor: 100
+        unit_of_measurement: "kW"
+        device_class: power
+        accuracy_decimals: 2
+      - name: "Int. El. Add. State"
+        address: 43091
+        size: u8
+        factor: 1
+
+      # ── Status ──
+      - name: "Prio"
+        address: 43086
+        size: u8
+        factor: 1
+      - name: "Degree Minutes"
+        address: 43005
+        size: s16
+        factor: 10
+        accuracy_decimals: 1
+      - name: "Alarm"
+        address: 45001
+        size: s16
+        factor: 1
+      - name: "FD1 Temperature Limiter"
+        address: 40054
+        size: s16
+        factor: 1
+        poll_group: slow
+      - name: "FR1 Anode Status"
+        address: 40074
+        size: s16
+        factor: 1
+        poll_group: slow
+      - name: "Software Version"
+        address: 43001
+        size: u16
+        factor: 1
+        poll_group: slow
+      - name: "Software Release"
+        address: 44331
+        size: u8
+        factor: 1
+        poll_group: slow
+
+      # ── Energy Meters ──
+      - name: "Energy HW Cpr+Add"
+        address: 44298
+        size: u32
+        factor: 10
+        unit_of_measurement: "kWh"
+        device_class: energy
+        accuracy_decimals: 1
+        poll_group: slow
+      - name: "Energy Heating Cpr+Add"
+        address: 44300
+        size: u32
+        factor: 10
+        unit_of_measurement: "kWh"
+        device_class: energy
+        accuracy_decimals: 1
+        poll_group: slow
+      - name: "Energy Cooling Cpr"
+        address: 44302
+        size: u32
+        factor: 10
+        unit_of_measurement: "kWh"
+        device_class: energy
+        accuracy_decimals: 1
+        poll_group: slow
+      - name: "Energy HW Cpr Only"
+        address: 44306
+        size: u32
+        factor: 10
+        unit_of_measurement: "kWh"
+        device_class: energy
+        accuracy_decimals: 1
+        poll_group: slow
+      - name: "Energy Heating Cpr Only"
+        address: 44308
+        size: u32
+        factor: 10
+        unit_of_measurement: "kWh"
+        device_class: energy
+        accuracy_decimals: 1
+        poll_group: slow
