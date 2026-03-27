@@ -11,7 +11,7 @@ static const char *TAG = "nibegw.number";
 
 void NibeGwCoilNumber::setup() {
   // Register as listener so we get state updates when the pump confirms the value
-  poller_->register_coil(address_, static_cast<CoilSize>(coil_size_), factor_,
+  poller_->register_coil(address_, static_cast<CoilSize>(coil_size_), factor_, poll_group_,
                          [this](float value) { this->publish_state(value); });
 }
 

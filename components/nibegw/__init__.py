@@ -60,6 +60,10 @@ CONF_MIN_VALUE = "min_value"
 CONF_MAX_VALUE = "max_value"
 CONF_STEP = "step"
 CONF_POLLER_ID = "poller_id"
+CONF_POLL_GROUPS = "poll_groups"
+CONF_POLL_GROUP = "poll_group"
+CONF_INTERVAL = "interval"
+CONF_GROUP_ID = "id"
 
 
 class Addresses(IntEnum):
@@ -193,11 +197,19 @@ UDP_SCHEMA = cv.Schema(
     }
 )
 
+POLL_GROUP_SCHEMA = cv.Schema(
+    {
+        cv.Required(CONF_GROUP_ID): cv.string_strict,
+        cv.Required(CONF_INTERVAL): cv.positive_time_period_milliseconds,
+    }
+)
+
 COIL_SENSOR_SCHEMA = sensor.sensor_schema(NibeGwCoilSensor).extend(
     {
         cv.Required(CONF_ADDRESS): cv.uint16_t,
         cv.Required(CONF_SIZE): cv.enum(COIL_SIZES, lower=True),
         cv.Optional(CONF_FACTOR, default=1): cv.positive_int,
+        cv.Optional(CONF_POLL_GROUP, default="default"): cv.string_strict,
     }
 ).extend(cv.COMPONENT_SCHEMA)
 
@@ -209,6 +221,7 @@ COIL_NUMBER_SCHEMA = number.number_schema(NibeGwCoilNumber).extend(
         cv.Required(CONF_MIN_VALUE): cv.float_,
         cv.Required(CONF_MAX_VALUE): cv.float_,
         cv.Optional(CONF_STEP, default=1.0): cv.positive_float,
+        cv.Optional(CONF_POLL_GROUP, default="default"): cv.string_strict,
     }
 ).extend(cv.COMPONENT_SCHEMA)
 
@@ -217,6 +230,7 @@ SENSORS_SCHEMA = cv.Schema(
         cv.Optional(CONF_ENABLED, default=False): cv.boolean,
         cv.GenerateID(CONF_POLLER_ID): cv.declare_id(NibeGwCoilPoller),
         cv.Optional(CONF_POLL_INTERVAL, default="30s"): cv.positive_time_period_milliseconds,
+        cv.Optional(CONF_POLL_GROUPS, default=[]): cv.ensure_list(POLL_GROUP_SCHEMA),
         cv.Optional(CONF_BUFFER_SIZE, default=4096): cv.int_range(min=0, max=65536),
         cv.Optional(CONF_BUFFER_MODE, default="latest_only"): cv.enum(BUFFER_MODES, lower=True),
         cv.Optional(CONF_COILS, default=[]): cv.ensure_list(COIL_SENSOR_SCHEMA),
@@ -312,6 +326,10 @@ async def to_code(config):
         cg.add(poller.set_buffer_size(sensors_conf[CONF_BUFFER_SIZE]))
         cg.add(poller.set_buffer_mode(sensors_conf[CONF_BUFFER_MODE]))
 
+        # Register explicit poll groups
+        for group_conf in sensors_conf.get(CONF_POLL_GROUPS, []):
+            cg.add(poller.add_poll_group(group_conf[CONF_GROUP_ID], group_conf[CONF_INTERVAL]))
+
         for coil_conf in sensors_conf.get(CONF_COILS, []):
             sens = await sensor.new_sensor(coil_conf)
             await cg.register_component(sens, coil_conf)
@@ -319,6 +337,7 @@ async def to_code(config):
             cg.add(sens.set_address(coil_conf[CONF_ADDRESS]))
             cg.add(sens.set_coil_size(coil_conf[CONF_SIZE]))
             cg.add(sens.set_factor(coil_conf[CONF_FACTOR]))
+            cg.add(sens.set_poll_group(coil_conf[CONF_POLL_GROUP]))
 
         for num_conf in sensors_conf.get(CONF_WRITABLE, []):
             num = await number.new_number(
@@ -333,3 +352,4 @@ async def to_code(config):
             cg.add(num.set_address(num_conf[CONF_ADDRESS]))
             cg.add(num.set_coil_size(num_conf[CONF_SIZE]))
             cg.add(num.set_factor(num_conf[CONF_FACTOR]))
+            cg.add(num.set_poll_group(num_conf[CONF_POLL_GROUP]))

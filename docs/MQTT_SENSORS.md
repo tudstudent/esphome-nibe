@@ -51,6 +51,11 @@ nibegw:
   sensors:
     enabled: true
     poll_interval: 30s
+    poll_groups:
+      - id: fast
+        interval: 10s
+      - id: slow
+        interval: 120s
     coils:
       - name: "BT1 Outdoor Temperature"
         address: 40004
@@ -59,6 +64,15 @@ nibegw:
         unit_of_measurement: "°C"
         device_class: temperature
         accuracy_decimals: 1
+        poll_group: fast
+      - name: "Energy Heating"
+        address: 44300
+        size: u32
+        factor: 10
+        unit_of_measurement: "kWh"
+        device_class: energy
+        accuracy_decimals: 1
+        poll_group: slow
 ```
 
 ### Dual mode (UDP + sensors)
@@ -125,11 +139,22 @@ nibegw:
 | Option | Default | Description |
 |---|---|---|
 | `enabled` | `false` | Enable direct coil polling |
-| `poll_interval` | `30s` | How often to request coil values from the heat pump |
+| `poll_interval` | `30s` | Default interval for poll groups not explicitly defined |
+| `poll_groups` | `[]` | Named poll groups with custom intervals (see below) |
 | `buffer_size` | `4096` | Circular buffer size in bytes for MQTT-offline storage (0 = disabled) |
 | `buffer_mode` | `latest_only` | `latest_only`, `history`, or `off` (see [Buffer behavior](#buffer-behavior)) |
 | `coils` | `[]` | List of read-only coil sensors |
 | `writable` | `[]` | List of writable coil number entities |
+
+### `poll_groups[]` entries
+
+| Option | Required | Description |
+|---|---|---|
+| `id` | yes | Group name (referenced by `poll_group` on coils) |
+| `interval` | yes | Poll interval for this group (e.g. `10s`, `30s`, `120s`) |
+
+Coils without an explicit `poll_group` are assigned to `"default"`, which uses `poll_interval`.
+Groups referenced by coils but not defined in `poll_groups` are auto-created with `poll_interval`.
 
 ### `coils[]` entries (read-only sensors)
 
@@ -139,6 +164,7 @@ nibegw:
 | `address` | yes | Nibe coil address (e.g. `40004`) |
 | `size` | yes | Data type: `u8`, `s8`, `u16`, `s16`, `u32`, `s32` |
 | `factor` | no (default: 1) | Raw value is divided by this (e.g. factor 10 means raw 215 = 21.5) |
+| `poll_group` | no (default: `"default"`) | Which poll group this coil belongs to |
 | `unit_of_measurement` | no | Unit string for HA (e.g. `"°C"`, `"Hz"`) |
 | `device_class` | no | HA device class (e.g. `temperature`, `frequency`, `power`) |
 | `accuracy_decimals` | no | Decimal places shown in HA |

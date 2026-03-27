@@ -8,7 +8,7 @@ namespace nibegw {
 static const char *TAG = "nibegw.sensor";
 
 void NibeGwCoilSensor::setup() {
-  poller_->register_coil(address_, static_cast<CoilSize>(coil_size_), factor_,
+  poller_->register_coil(address_, static_cast<CoilSize>(coil_size_), factor_, poll_group_,
                          [this](float value) { this->publish_state(value); });
 }
 

@@ -11,11 +11,27 @@ namespace nibegw {
 
 static const uint8_t MAX_COILS_PER_REQUEST = 20;
 
+void NibeGwCoilPoller::add_poll_group(const std::string &id, uint32_t interval_ms) {
+  size_t idx = poll_groups_.size();
+  poll_groups_.push_back({id, interval_ms, {}, 0, 0});
+  poll_group_index_[id] = idx;
+}
+
 void NibeGwCoilPoller::register_coil(uint16_t address, CoilSize size, uint16_t factor,
+                                     const std::string &poll_group,
                                      std::function<void(float)> callback) {
-  size_t idx = coils_.size();
+  size_t coil_idx = coils_.size();
   coils_.push_back({address, size, factor, std::move(callback)});
-  coil_index_[address] = idx;
+  coil_index_[address] = coil_idx;
+
+  // Find or create the poll group
+  auto it = poll_group_index_.find(poll_group);
+  if (it == poll_group_index_.end()) {
+    // Group not explicitly defined - create with default interval
+    add_poll_group(poll_group, default_poll_interval_ms_);
+    it = poll_group_index_.find(poll_group);
+  }
+  poll_groups_[it->second].coil_indices.push_back(coil_idx);
 }
 
 void NibeGwCoilPoller::setup() {
@@ -31,7 +47,7 @@ void NibeGwCoilPoller::setup() {
   gw_->add_listener(MODBUS40, READ_TOKEN,
                      [this](const request_data_type &data) { this->on_data_received(data); });
 
-  ESP_LOGI(TAG, "Coil poller set up with %zu coils, poll interval %u ms", coils_.size(), poll_interval_ms_);
+  ESP_LOGI(TAG, "Coil poller set up with %zu coils in %zu poll groups", coils_.size(), poll_groups_.size());
 }
 
 void NibeGwCoilPoller::loop() {
@@ -45,23 +61,24 @@ void NibeGwCoilPoller::loop() {
   }
   was_connected_ = connected;
 
-  // Poll on interval
-  if (coils_.empty()) {
-    return;
-  }
+  // Check each poll group's timer
+  for (auto &group : poll_groups_) {
+    if (group.coil_indices.empty()) {
+      continue;
+    }
 
-  if (now - last_poll_ >= poll_interval_ms_) {
-    last_poll_ = now;
-    auto request = build_poll_request();
-    if (!request.empty()) {
-      gw_->add_queued_request(MODBUS40, READ_TOKEN, std::move(request));
+    if (now - group.last_poll >= group.interval_ms) {
+      group.last_poll = now;
+      auto request = build_poll_request(group);
+      if (!request.empty()) {
+        gw_->add_queued_request(MODBUS40, READ_TOKEN, std::move(request));
+      }
     }
   }
 }
 
 void NibeGwCoilPoller::dump_config() {
   ESP_LOGCONFIG(TAG, "NibeGW Coil Poller:");
-  ESP_LOGCONFIG(TAG, "  Poll interval: %u ms", poll_interval_ms_);
   ESP_LOGCONFIG(TAG, "  Buffer mode: %s",
                 buffer_mode_ == BUFFER_MODE_OFF        ? "off"
                 : buffer_mode_ == BUFFER_MODE_LATEST_ONLY ? "latest_only"
@@ -70,27 +87,31 @@ void NibeGwCoilPoller::dump_config() {
     ESP_LOGCONFIG(TAG, "  Buffer size: %zu bytes (%zu entries)", buffer_size_bytes_,
                   history_buffer_.size());
   }
-  ESP_LOGCONFIG(TAG, "  Registered coils: %zu", coils_.size());
-  for (auto &coil : coils_) {
-    ESP_LOGCONFIG(TAG, "    Address: %u, Size: %u, Factor: %u", coil.address, coil.size, coil.factor);
+  ESP_LOGCONFIG(TAG, "  Total coils: %zu", coils_.size());
+  for (auto &group : poll_groups_) {
+    ESP_LOGCONFIG(TAG, "  Poll group '%s': interval %u ms, %zu coils",
+                  group.id.c_str(), group.interval_ms, group.coil_indices.size());
+    for (auto idx : group.coil_indices) {
+      auto &coil = coils_[idx];
+      ESP_LOGCONFIG(TAG, "    Address: %u, Size: %u, Factor: %u", coil.address, coil.size, coil.factor);
+    }
   }
 }
 
-request_data_type NibeGwCoilPoller::build_poll_request() {
-  // Build a slave response packet with coil addresses to read
-  // Format: C0 69 len [addr_lo addr_hi ...] checksum
-  size_t count = std::min((size_t) MAX_COILS_PER_REQUEST, coils_.size());
+request_data_type NibeGwCoilPoller::build_poll_request(PollGroup &group) {
+  size_t count = std::min((size_t) MAX_COILS_PER_REQUEST, group.coil_indices.size());
 
   std::vector<uint8_t> payload;
   for (size_t i = 0; i < count; i++) {
-    size_t idx = (poll_offset_ + i) % coils_.size();
-    uint16_t addr = coils_[idx].address;
+    size_t group_idx = (group.poll_offset + i) % group.coil_indices.size();
+    size_t coil_idx = group.coil_indices[group_idx];
+    uint16_t addr = coils_[coil_idx].address;
     payload.push_back(addr & 0xFF);
     payload.push_back((addr >> 8) & 0xFF);
   }
 
   // Advance round-robin offset for next poll
-  poll_offset_ = (poll_offset_ + count) % coils_.size();
+  group.poll_offset = (group.poll_offset + count) % group.coil_indices.size();
 
   // Build the packet: start, token, len, payload, checksum
   request_data_type packet;
@@ -101,7 +122,6 @@ request_data_type NibeGwCoilPoller::build_poll_request() {
     packet.push_back(b);
   }
 
-  // Calculate checksum (XOR of all bytes)
   uint8_t checksum = 0;
   for (auto b : packet) {
     checksum ^= b;
@@ -115,8 +135,6 @@ request_data_type NibeGwCoilPoller::build_poll_request() {
 }
 
 void NibeGwCoilPoller::on_data_received(const request_data_type &data) {
-  // Data is the deduped message body (after start byte removal)
-  // Format: [addr_lo, addr_hi, value_b0, value_b1, ...] repeated for each coil
   size_t offset = 0;
   while (offset + 2 <= data.size()) {
     uint16_t address = data[offset] | (data[offset + 1] << 8);
@@ -142,10 +160,7 @@ void NibeGwCoilPoller::on_data_received(const request_data_type &data) {
 
     ESP_LOGD(TAG, "Coil %u = %.2f", address, value);
 
-    // Dispatch to sensor
     coil.callback(value);
-
-    // Buffer the value
     buffer_value(address, value);
   }
 }
@@ -217,7 +232,6 @@ void NibeGwCoilPoller::buffer_value(uint16_t address, float value) {
   if (history_count_ < capacity) {
     history_count_++;
   } else {
-    // Buffer full, advance head (evict oldest)
     history_head_ = (history_head_ + 1) % capacity;
   }
 }
@@ -256,7 +270,7 @@ bool NibeGwCoilPoller::is_mqtt_connected() {
     return mqtt::global_mqtt_client->is_connected();
   }
 #endif
-  return true;  // If no MQTT, consider always "connected" (no buffering needed)
+  return true;
 }
 
 }  // namespace nibegw
