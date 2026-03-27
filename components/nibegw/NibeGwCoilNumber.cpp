@@ -10,6 +10,11 @@ namespace nibegw {
 static const char *TAG = "nibegw.number";
 
 void NibeGwCoilNumber::setup() {
+  if (poller_ == nullptr || gw_ == nullptr) {
+    ESP_LOGE(TAG, "Poller or gateway not set for number at address %u", address_);
+    this->mark_failed();
+    return;
+  }
   // Register as listener so we get state updates when the pump confirms the value
   poller_->register_coil(address_, static_cast<CoilSize>(coil_size_), factor_, poll_group_,
                          [this](float value) { this->publish_state(value); });

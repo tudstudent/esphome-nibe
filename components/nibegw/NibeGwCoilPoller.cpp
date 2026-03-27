@@ -99,6 +99,9 @@ void NibeGwCoilPoller::dump_config() {
 }
 
 request_data_type NibeGwCoilPoller::build_poll_request(PollGroup &group) {
+  if (group.coil_indices.empty()) {
+    return {};
+  }
   size_t count = std::min((size_t) MAX_COILS_PER_REQUEST, group.coil_indices.size());
 
   std::vector<uint8_t> payload;
@@ -181,10 +184,12 @@ float NibeGwCoilPoller::decode_coil_value(const uint8_t *data, CoilSize size, ui
       raw = (float) (int16_t)(data[0] | (data[1] << 8));
       break;
     case COIL_SIZE_U32:
-      raw = (float) (uint32_t)(data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24));
+      raw = (float) ((uint32_t) data[0] | ((uint32_t) data[1] << 8) | ((uint32_t) data[2] << 16) |
+                      ((uint32_t) data[3] << 24));
       break;
     case COIL_SIZE_S32:
-      raw = (float) (int32_t)(data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24));
+      raw = (float) (int32_t)((uint32_t) data[0] | ((uint32_t) data[1] << 8) | ((uint32_t) data[2] << 16) |
+                               ((uint32_t) data[3] << 24));
       break;
     default:
       return NAN;

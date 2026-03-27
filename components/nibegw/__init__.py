@@ -6,13 +6,8 @@ import esphome.codegen as cg
 from esphome.const import (
     CONF_ID,
     CONF_PORT,
-    CONF_NAME,
-    CONF_UNIT_OF_MEASUREMENT,
-    CONF_DEVICE_CLASS,
-    CONF_ACCURACY_DECIMALS,
 )
 from esphome import pins
-from esphome.core import CORE
 from esphome.components.network import IPAddress
 from enum import IntEnum, Enum
 from esphome.components import uart, socket, sensor, number
@@ -199,7 +194,7 @@ UDP_SCHEMA = cv.Schema(
 
 POLL_GROUP_SCHEMA = cv.Schema(
     {
-        cv.Required(CONF_GROUP_ID): cv.string_strict,
+        cv.Required(CONF_GROUP_ID): cv.All(cv.string_strict, cv.Length(min=1)),
         cv.Required(CONF_INTERVAL): cv.positive_time_period_milliseconds,
     }
 )
@@ -259,7 +254,7 @@ CONFIG_SCHEMA = cv.All(
 )
 
 
-async def to_code(config):
+async def to_code(config: ConfigType) -> None:
     if dir_pin := config.get(CONF_DIR_PIN):
         dir_pin_data = await cg.gpio_pin_expression(dir_pin)
     else:

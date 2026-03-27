@@ -8,6 +8,11 @@ namespace nibegw {
 static const char *TAG = "nibegw.sensor";
 
 void NibeGwCoilSensor::setup() {
+  if (poller_ == nullptr) {
+    ESP_LOGE(TAG, "Poller not set for sensor at address %u", address_);
+    this->mark_failed();
+    return;
+  }
   poller_->register_coil(address_, static_cast<CoilSize>(coil_size_), factor_, poll_group_,
                          [this](float value) { this->publish_state(value); });
 }
