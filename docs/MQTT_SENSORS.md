@@ -341,6 +341,33 @@ Set `udp.enabled: false` if you're no longer running nibe-mqtt.
 
 Once verified, stop and remove the Docker container.
 
+## Optional: Web dashboard and diagnostics
+
+ESPHome has a built-in web server that shows live sensor values - useful for quick checks without HA:
+
+```yaml
+web_server:
+  port: 80
+```
+
+Access it at `http://<esp32-ip>/`. All coil sensors appear automatically.
+
+To monitor memory usage (useful for tuning `buffer_size`):
+
+```yaml
+debug:
+  update_interval: 30s
+
+sensor:
+  - platform: debug
+    free:
+      name: "Free Heap Memory"
+    loop_time:
+      name: "Loop Time"
+```
+
+These show up on both the web dashboard and in MQTT/HA.
+
 ## Troubleshooting
 
 ### No sensor data appearing
