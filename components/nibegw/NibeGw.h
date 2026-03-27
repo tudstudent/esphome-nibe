@@ -54,11 +54,12 @@ enum eState {
 };
 
 enum eTokenType {
-  READ_TOKEN = 0x69,
-  WRITE_TOKEN = 0x6B,
   RMU_WRITE_TOKEN = 0x60,
   RMU_DATA_MSG = 0x62,
   RMU_DATA_TOKEN = 0x63,
+  MODBUS_DATA_MSG = 0x68,
+  READ_TOKEN = 0x69,
+  WRITE_TOKEN = 0x6B,
   ACCESSORY_TOKEN = 0xEE,
 };
 
