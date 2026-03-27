@@ -138,6 +138,12 @@ request_data_type NibeGwCoilPoller::build_poll_request(PollGroup &group) {
 }
 
 void NibeGwCoilPoller::on_data_received(const request_data_type &data) {
+  // Skip our own outgoing response packets (echoed back through the listener).
+  // Our packets start with STARTBYTE_SLAVE (0xC0), pump data starts with register addresses.
+  if (!data.empty() && data[0] == STARTBYTE_SLAVE) {
+    return;
+  }
+
   size_t offset = 0;
   while (offset + 2 <= data.size()) {
     uint16_t address = data[offset] | (data[offset + 1] << 8);
