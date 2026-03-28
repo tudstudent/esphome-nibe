@@ -133,7 +133,7 @@ def _upgrade_ports(config: ConfigType) -> ConfigType:
 
 def _validate_config(config: ConfigType) -> ConfigType:
     """Validate that at least one feature is enabled."""
-    udp_enabled = config.get(CONF_UDP, {}).get(CONF_ENABLED, False)
+    udp_enabled = config.get(CONF_UDP, {}).get(CONF_ENABLED, True)
     sensors_enabled = config.get(CONF_SENSORS, {}).get(CONF_ENABLED, False)
     if not udp_enabled and not sensors_enabled:
         raise cv.Invalid(
@@ -183,7 +183,7 @@ PORTS_SCHEMA = cv.Schema(
 
 UDP_SCHEMA = cv.Schema(
     {
-        cv.Optional(CONF_ENABLED, default=False): cv.boolean,
+        cv.Optional(CONF_ENABLED, default=True): cv.boolean,
         cv.Optional(CONF_TARGET, []): cv.ensure_list(TARGET_SCHEMA),
         cv.Optional(CONF_READ_PORT, default=9999): cv.port,
         cv.Optional(CONF_WRITE_PORT, default=10000): cv.port,
