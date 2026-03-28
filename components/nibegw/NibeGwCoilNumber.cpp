@@ -18,6 +18,9 @@ void NibeGwCoilNumber::setup() {
   // Register as listener to receive current value from pump (via read polling)
   poller_->register_coil(address_, static_cast<CoilSize>(coil_size_), factor_, poll_group_,
                          [this](float value) { this->publish_state(value); });
+
+  // Queue an immediate read to get the current value on startup
+  queue_read_request();
 }
 
 void NibeGwCoilNumber::loop() {
