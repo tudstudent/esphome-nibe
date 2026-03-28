@@ -124,7 +124,8 @@ void NibeGwCoilNumber::queue_read_request() {
   }
   packet.push_back(checksum);
 
-  gw_->add_queued_request(MODBUS40, READ_TOKEN, std::move(packet));
+  // Use priority request so verify-reads jump ahead of regular polling
+  gw_->add_priority_request(MODBUS40, READ_TOKEN, std::move(packet));
 }
 
 }  // namespace nibegw
