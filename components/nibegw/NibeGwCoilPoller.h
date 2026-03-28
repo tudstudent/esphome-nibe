@@ -75,8 +75,9 @@ class NibeGwCoilPoller : public Component {
  protected:
   static float decode_coil_value(const uint8_t *data, CoilSize size, uint16_t factor);
   static uint8_t coil_data_bytes(CoilSize size);
-  request_data_type build_poll_request(PollGroup &group);
-  void on_data_received(const request_data_type &data);
+  request_data_type build_read_request(PollGroup &group);
+  void on_data_msg_received(const request_data_type &data);
+  void on_read_response_received(const request_data_type &data);
   void buffer_value(uint16_t address, float value);
   void flush_buffer();
   bool is_mqtt_connected();
