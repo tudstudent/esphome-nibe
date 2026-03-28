@@ -101,7 +101,7 @@ request_data_type NibeGwCoilPoller::build_read_request(PollGroup &group) {
   group.poll_offset = (group.poll_offset + 1) % group.coil_indices.size();
 
   uint16_t addr = coils_[coil_idx].address;
-  ESP_LOGI(TAG, "Polling coil %u (group '%s')", addr, group.id.c_str());
+  ESP_LOGD(TAG, "Polling coil %u (group '%s')", addr, group.id.c_str());
 
   request_data_type packet;
   packet.push_back(STARTBYTE_SLAVE);
@@ -124,7 +124,7 @@ request_data_type NibeGwCoilPoller::build_read_request(PollGroup &group) {
 
 void NibeGwCoilPoller::on_data_msg_received(const request_data_type &data) {
   // MODBUS_DATA_MSG (0x68): pump broadcast with 4-byte entries [addr_lo addr_hi val_lo val_hi]
-  ESP_LOGI(TAG, "Data broadcast received: %zu bytes", data.size());
+  ESP_LOGV(TAG, "Data broadcast received: %zu bytes", data.size());
   size_t offset = 0;
   while (offset + 4 <= data.size()) {
     uint16_t address = data[offset] | (data[offset + 1] << 8);
@@ -160,7 +160,7 @@ void NibeGwCoilPoller::on_data_msg_received(const request_data_type &data) {
 void NibeGwCoilPoller::on_read_response_received(const request_data_type &data) {
   // MODBUS_READ_RESP (0x6A): response to our read request
   // Format: [addr_lo addr_hi val_b0 val_b1 val_b2 val_b3] = 6 bytes
-  ESP_LOGI(TAG, "Read response received: %zu bytes", data.size());
+  ESP_LOGV(TAG, "Read response received: %zu bytes", data.size());
   if (data.size() < 6) {
     ESP_LOGW(TAG, "Read response too short: %zu bytes", data.size());
     return;
@@ -185,35 +185,40 @@ void NibeGwCoilPoller::on_read_response_received(const request_data_type &data) 
 }
 
 float NibeGwCoilPoller::decode_coil_value(const uint8_t *data, CoilSize size, uint16_t factor) {
-  float raw;
+  int32_t raw_int;
+  uint32_t raw_uint;
+  bool is_signed = false;
+
   switch (size) {
     case COIL_SIZE_U8:
-      raw = (float) data[0];
-      break;
+      raw_uint = data[0];
+      if (raw_uint == 0xFF) return NAN;  // Nibe "no data" sentinel
+      return (float) raw_uint / (factor > 1 ? (float) factor : 1.0f);
     case COIL_SIZE_S8:
-      raw = (float) (int8_t) data[0];
-      break;
+      raw_int = (int8_t) data[0];
+      if (raw_int == -128) return NAN;  // Nibe "no data" sentinel
+      return (float) raw_int / (factor > 1 ? (float) factor : 1.0f);
     case COIL_SIZE_U16:
-      raw = (float) (uint16_t)(data[0] | (data[1] << 8));
-      break;
+      raw_uint = (uint16_t)(data[0] | (data[1] << 8));
+      if (raw_uint == 0xFFFF) return NAN;
+      return (float) raw_uint / (factor > 1 ? (float) factor : 1.0f);
     case COIL_SIZE_S16:
-      raw = (float) (int16_t)(data[0] | (data[1] << 8));
-      break;
+      raw_int = (int16_t)(data[0] | (data[1] << 8));
+      if (raw_int == -32768) return NAN;  // 0x8000
+      return (float) raw_int / (factor > 1 ? (float) factor : 1.0f);
     case COIL_SIZE_U32:
-      raw = (float) ((uint32_t) data[0] | ((uint32_t) data[1] << 8) | ((uint32_t) data[2] << 16) |
-                      ((uint32_t) data[3] << 24));
-      break;
+      raw_uint = (uint32_t) data[0] | ((uint32_t) data[1] << 8) | ((uint32_t) data[2] << 16) |
+                 ((uint32_t) data[3] << 24);
+      if (raw_uint == 0xFFFFFFFF) return NAN;
+      return (float) raw_uint / (factor > 1 ? (float) factor : 1.0f);
     case COIL_SIZE_S32:
-      raw = (float) (int32_t)((uint32_t) data[0] | ((uint32_t) data[1] << 8) | ((uint32_t) data[2] << 16) |
-                               ((uint32_t) data[3] << 24));
-      break;
+      raw_int = (int32_t)((uint32_t) data[0] | ((uint32_t) data[1] << 8) | ((uint32_t) data[2] << 16) |
+                           ((uint32_t) data[3] << 24));
+      if (raw_int == -2147483648) return NAN;  // 0x80000000
+      return (float) raw_int / (factor > 1 ? (float) factor : 1.0f);
     default:
       return NAN;
   }
-  if (factor > 1) {
-    return raw / (float) factor;
-  }
-  return raw;
 }
 
 uint8_t NibeGwCoilPoller::coil_data_bytes(CoilSize size) {
