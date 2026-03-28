@@ -179,6 +179,28 @@ Same as `coils[]` plus:
 | `max_value` | yes | Maximum allowed value |
 | `step` | no (default: 1.0) | Step size for the number entity |
 
+### Write behavior
+
+Writable coils appear as `number` entities in HA, controllable via MQTT command topic or the web dashboard.
+
+**Write flow:**
+1. Value is sent to the heat pump as a MODBUS write request (0x6B)
+2. The pump confirms or denies the write (0x6C response)
+3. On success: a read-back request is queued to verify the value from the pump
+4. On denial: a warning is logged (the pump rejects writes to read-only or out-of-range values)
+5. Write timeout: 10 seconds - if no response, the write is considered failed
+
+**Initial value on boot:**
+Writable coils queue an initial read request 5 seconds after boot to fetch the current value from the pump. This means the number entity shows the actual pump setting shortly after startup, without needing to write first.
+
+**Queue behavior:**
+Read and write requests share the RS485 bus with regular sensor polling. The Nibe protocol processes one request per token cycle (~2 seconds). Requests are served FIFO with a queue depth of 3 per token type. In practice:
+- Write requests use WRITE_TOKEN (0x6B) - separate queue from reads
+- Read-after-write uses READ_TOKEN (0x69) - shares queue with sensor polling
+- With many sensors polling, a read-back may take a few seconds to be served
+
+**Important:** Only configure coils marked with `"write": true` in the coil database. Writing to read-only coils will be denied by the pump.
+
 ## Finding coil addresses
 
 Coil definitions for each Nibe model are maintained in the [nibe](https://github.com/yozik04/nibe) library under [`nibe/data/`](https://github.com/yozik04/nibe/tree/master/nibe/data).
