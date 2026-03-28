@@ -68,7 +68,10 @@ void NibeGwCoilPoller::loop() {
   }
   was_connected_ = connected;
 
-  // Each group tick sends ONE coil read request (round-robin)
+  // Queue coil read requests in batches per group. Each group gets up to
+  // BATCH_SIZE requests per tick, but only if there's space in the shared
+  // queue. This prevents fast groups from starving slower groups.
+  auto &queue = gw_->get_request_queue(MODBUS40, READ_TOKEN);
   for (auto &group : poll_groups_) {
     if (group.coil_indices.empty()) {
       continue;
@@ -76,9 +79,13 @@ void NibeGwCoilPoller::loop() {
 
     if (now - group.last_poll >= group.interval_ms) {
       group.last_poll = now;
-      auto request = build_read_request(group);
-      if (!request.empty()) {
-        gw_->add_queued_request(MODBUS40, READ_TOKEN, std::move(request));
+      size_t available = (queue.size() < QUEUE_CAPACITY) ? QUEUE_CAPACITY - queue.size() : 0;
+      size_t batch = std::min({group.coil_indices.size(), (size_t) BATCH_SIZE, available});
+      for (size_t i = 0; i < batch; i++) {
+        auto request = build_read_request(group);
+        if (!request.empty()) {
+          gw_->add_queued_request(MODBUS40, READ_TOKEN, std::move(request));
+        }
       }
     }
   }

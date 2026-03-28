@@ -84,6 +84,9 @@ class NibeGwCoilPoller : public Component {
   void flush_buffer();
   bool is_mqtt_connected();
 
+  static constexpr size_t BATCH_SIZE = 3;           // max coils per group per tick
+  static constexpr size_t QUEUE_CAPACITY = NibeGwComponent::get_queue_capacity();
+
   NibeGwComponent *gw_{nullptr};
   uint32_t default_poll_interval_ms_{30000};
   size_t buffer_size_bytes_{4096};

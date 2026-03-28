@@ -112,6 +112,14 @@ class NibeGwComponent : public esphome::Component, public esphome::uart::UARTDev
     queue.push_front(std::move(request));
   }
 
+  const std::deque<request_data_type> &get_request_queue(int address, int token) const {
+    static const std::deque<request_data_type> empty;
+    auto it = requests_.find(request_key_type(address, token));
+    return (it != requests_.end()) ? it->second : empty;
+  }
+
+  static constexpr size_t get_queue_capacity() { return REQUESTS_QUEUE_MAX; }
+
   void add_acknowledge(int address) {
     gw_->setAcknowledge(address, true);
   }
