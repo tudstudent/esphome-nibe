@@ -185,40 +185,38 @@ void NibeGwCoilPoller::on_read_response_received(const request_data_type &data) 
 }
 
 float NibeGwCoilPoller::decode_coil_value(const uint8_t *data, CoilSize size, uint16_t factor) {
-  int32_t raw_int;
-  uint32_t raw_uint;
-  bool is_signed = false;
-
+  float raw;
   switch (size) {
     case COIL_SIZE_U8:
-      raw_uint = data[0];
-      if (raw_uint == 0xFF) return NAN;  // Nibe "no data" sentinel
-      return (float) raw_uint / (factor > 1 ? (float) factor : 1.0f);
+      raw = (float) data[0];
+      break;
     case COIL_SIZE_S8:
-      raw_int = (int8_t) data[0];
-      if (raw_int == -128) return NAN;  // Nibe "no data" sentinel
-      return (float) raw_int / (factor > 1 ? (float) factor : 1.0f);
+      raw = (float) (int8_t) data[0];
+      break;
     case COIL_SIZE_U16:
-      raw_uint = (uint16_t)(data[0] | (data[1] << 8));
-      if (raw_uint == 0xFFFF) return NAN;
-      return (float) raw_uint / (factor > 1 ? (float) factor : 1.0f);
-    case COIL_SIZE_S16:
-      raw_int = (int16_t)(data[0] | (data[1] << 8));
-      if (raw_int == -32768) return NAN;  // 0x8000
-      return (float) raw_int / (factor > 1 ? (float) factor : 1.0f);
+      raw = (float) (uint16_t)(data[0] | (data[1] << 8));
+      break;
+    case COIL_SIZE_S16: {
+      int16_t val = (int16_t)(data[0] | (data[1] << 8));
+      if (val == -32768) return NAN;  // 0x8000 = Nibe "no sensor" for s16
+      raw = (float) val;
+      break;
+    }
     case COIL_SIZE_U32:
-      raw_uint = (uint32_t) data[0] | ((uint32_t) data[1] << 8) | ((uint32_t) data[2] << 16) |
-                 ((uint32_t) data[3] << 24);
-      if (raw_uint == 0xFFFFFFFF) return NAN;
-      return (float) raw_uint / (factor > 1 ? (float) factor : 1.0f);
+      raw = (float) ((uint32_t) data[0] | ((uint32_t) data[1] << 8) | ((uint32_t) data[2] << 16) |
+                      ((uint32_t) data[3] << 24));
+      break;
     case COIL_SIZE_S32:
-      raw_int = (int32_t)((uint32_t) data[0] | ((uint32_t) data[1] << 8) | ((uint32_t) data[2] << 16) |
-                           ((uint32_t) data[3] << 24));
-      if (raw_int == -2147483648) return NAN;  // 0x80000000
-      return (float) raw_int / (factor > 1 ? (float) factor : 1.0f);
+      raw = (float) (int32_t)((uint32_t) data[0] | ((uint32_t) data[1] << 8) | ((uint32_t) data[2] << 16) |
+                               ((uint32_t) data[3] << 24));
+      break;
     default:
       return NAN;
   }
+  if (factor > 1) {
+    return raw / (float) factor;
+  }
+  return raw;
 }
 
 uint8_t NibeGwCoilPoller::coil_data_bytes(CoilSize size) {
