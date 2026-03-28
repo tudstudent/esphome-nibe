@@ -12,6 +12,8 @@
 namespace esphome {
 namespace nibegw {
 
+class NibeGwCoilNumber;
+
 enum CoilSize : uint8_t {
   COIL_SIZE_U8 = 0,
   COIL_SIZE_U16 = 1,
@@ -43,7 +45,7 @@ struct BufferEntry {
 struct PollGroup {
   std::string id;
   uint32_t interval_ms;
-  std::vector<size_t> coil_indices;  // indices into coils_ vector
+  std::vector<size_t> coil_indices;
   size_t poll_offset{0};
   uint32_t last_poll{0};
 };
@@ -53,16 +55,15 @@ class NibeGwCoilPoller : public Component {
   void set_gw(NibeGwComponent *gw) { gw_ = gw; }
   void set_buffer_size(size_t bytes) { buffer_size_bytes_ = bytes; }
   void set_buffer_mode(uint8_t mode) { buffer_mode_ = static_cast<BufferMode>(mode); }
-
-  // Legacy: set a default poll interval (used when no poll_groups defined)
   void set_poll_interval(uint32_t ms) { default_poll_interval_ms_ = ms; }
 
-  // Add a named poll group with its own interval
   void add_poll_group(const std::string &id, uint32_t interval_ms);
 
-  // Register a coil and assign it to a poll group
   void register_coil(uint16_t address, CoilSize size, uint16_t factor,
                      const std::string &poll_group, std::function<void(float)> callback);
+
+  // Register a number entity for write response dispatch
+  void register_writable(NibeGwCoilNumber *number);
 
   void setup() override;
   void loop() override;
@@ -78,6 +79,7 @@ class NibeGwCoilPoller : public Component {
   request_data_type build_read_request(PollGroup &group);
   void on_data_msg_received(const request_data_type &data);
   void on_read_response_received(const request_data_type &data);
+  void on_write_response_received(const request_data_type &data);
   void buffer_value(uint16_t address, float value);
   void flush_buffer();
   bool is_mqtt_connected();
@@ -88,9 +90,12 @@ class NibeGwCoilPoller : public Component {
   BufferMode buffer_mode_{BUFFER_MODE_LATEST_ONLY};
 
   std::vector<CoilRegistration> coils_;
-  std::map<uint16_t, size_t> coil_index_;  // address -> index in coils_
+  std::map<uint16_t, size_t> coil_index_;
   std::vector<PollGroup> poll_groups_;
-  std::map<std::string, size_t> poll_group_index_;  // id -> index in poll_groups_
+  std::map<std::string, size_t> poll_group_index_;
+
+  // Writable coil entities for write response dispatch
+  std::vector<NibeGwCoilNumber *> writable_numbers_;
 
   // Buffer for offline storage
   std::vector<BufferEntry> history_buffer_;

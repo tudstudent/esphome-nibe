@@ -348,3 +348,4 @@ async def to_code(config: ConfigType) -> None:
             cg.add(num.set_coil_size(num_conf[CONF_SIZE]))
             cg.add(num.set_factor(num_conf[CONF_FACTOR]))
             cg.add(num.set_poll_group(num_conf[CONF_POLL_GROUP]))
+            cg.add(poller.register_writable(num))

@@ -21,10 +21,15 @@ class NibeGwCoilNumber : public number::Number, public Component {
   void set_poll_group(const std::string &group) { poll_group_ = group; }
 
   void setup() override;
+  void loop() override;
   void dump_config() override;
+
+  // Called by poller when write response (0x6C) arrives
+  void on_write_response(bool success);
 
  protected:
   void control(float value) override;
+  void queue_read_request();
 
   NibeGwComponent *gw_{nullptr};
   NibeGwCoilPoller *poller_{nullptr};
@@ -32,6 +37,12 @@ class NibeGwCoilNumber : public number::Number, public Component {
   uint8_t coil_size_{0};
   uint16_t factor_{1};
   std::string poll_group_{"default"};
+
+  // Write state tracking
+  bool write_pending_{false};
+  float write_requested_value_{0};
+  uint32_t write_sent_at_{0};
+  static const uint32_t WRITE_TIMEOUT_MS = 10000;
 };
 
 }  // namespace nibegw
