@@ -9,12 +9,9 @@
 namespace esphome {
 namespace nibegw {
 
-static const uint8_t MAX_COILS_PER_REQUEST = 20;
-
 void NibeGwCoilPoller::add_poll_group(const std::string &id, uint32_t interval_ms) {
-  size_t idx = poll_groups_.size();
   poll_groups_.push_back({id, interval_ms, {}, 0, 0});
-  poll_group_index_[id] = idx;
+  poll_group_index_[id] = poll_groups_.size() - 1;
 }
 
 void NibeGwCoilPoller::register_coil(uint16_t address, CoilSize size, uint16_t factor,
@@ -24,10 +21,8 @@ void NibeGwCoilPoller::register_coil(uint16_t address, CoilSize size, uint16_t f
   coils_.push_back({address, size, factor, std::move(callback)});
   coil_index_[address] = coil_idx;
 
-  // Find or create the poll group
   auto it = poll_group_index_.find(poll_group);
   if (it == poll_group_index_.end()) {
-    // Group not explicitly defined - create with default interval
     add_poll_group(poll_group, default_poll_interval_ms_);
     it = poll_group_index_.find(poll_group);
   }
@@ -35,7 +30,6 @@ void NibeGwCoilPoller::register_coil(uint16_t address, CoilSize size, uint16_t f
 }
 
 void NibeGwCoilPoller::setup() {
-  // Set up the history buffer capacity
   if (buffer_mode_ == BUFFER_MODE_HISTORY && buffer_size_bytes_ > 0) {
     size_t capacity = buffer_size_bytes_ / sizeof(BufferEntry);
     if (capacity > 0) {
@@ -43,10 +37,13 @@ void NibeGwCoilPoller::setup() {
     }
   }
 
-  // Register as listener for MODBUS40 data messages (0x68)
-  // The pump broadcasts register data on MODBUS_DATA_MSG, not READ_TOKEN
+  // Listen on MODBUS_DATA_MSG (0x68) - pump's periodic broadcast with 2-byte values
   gw_->add_listener(MODBUS40, MODBUS_DATA_MSG,
-                     [this](const request_data_type &data) { this->on_data_received(data); });
+                     [this](const request_data_type &data) { this->on_data_msg_received(data); });
+
+  // Listen on MODBUS_READ_RESP (0x6A) - response to our read requests with 4-byte values
+  gw_->add_listener(MODBUS40, MODBUS_READ_RESP,
+                     [this](const request_data_type &data) { this->on_read_response_received(data); });
 
   ESP_LOGI(TAG, "Coil poller set up with %zu coils in %zu poll groups", coils_.size(), poll_groups_.size());
 }
@@ -54,7 +51,6 @@ void NibeGwCoilPoller::setup() {
 void NibeGwCoilPoller::loop() {
   uint32_t now = millis();
 
-  // Check MQTT connection state for buffer flush
   bool connected = is_mqtt_connected();
   if (connected && !was_connected_) {
     ESP_LOGI(TAG, "MQTT reconnected, flushing buffer");
@@ -62,7 +58,7 @@ void NibeGwCoilPoller::loop() {
   }
   was_connected_ = connected;
 
-  // Check each poll group's timer
+  // Each group tick sends ONE coil read request (round-robin)
   for (auto &group : poll_groups_) {
     if (group.coil_indices.empty()) {
       continue;
@@ -70,7 +66,7 @@ void NibeGwCoilPoller::loop() {
 
     if (now - group.last_poll >= group.interval_ms) {
       group.last_poll = now;
-      auto request = build_poll_request(group);
+      auto request = build_read_request(group);
       if (!request.empty()) {
         gw_->add_queued_request(MODBUS40, READ_TOKEN, std::move(request));
       }
@@ -81,7 +77,7 @@ void NibeGwCoilPoller::loop() {
 void NibeGwCoilPoller::dump_config() {
   ESP_LOGCONFIG(TAG, "NibeGW Coil Poller:");
   ESP_LOGCONFIG(TAG, "  Buffer mode: %s",
-                buffer_mode_ == BUFFER_MODE_OFF        ? "off"
+                buffer_mode_ == BUFFER_MODE_OFF           ? "off"
                 : buffer_mode_ == BUFFER_MODE_LATEST_ONLY ? "latest_only"
                                                           : "history");
   if (buffer_mode_ == BUFFER_MODE_HISTORY) {
@@ -92,39 +88,27 @@ void NibeGwCoilPoller::dump_config() {
   for (auto &group : poll_groups_) {
     ESP_LOGCONFIG(TAG, "  Poll group '%s': interval %u ms, %zu coils",
                   group.id.c_str(), group.interval_ms, group.coil_indices.size());
-    for (auto idx : group.coil_indices) {
-      auto &coil = coils_[idx];
-      ESP_LOGCONFIG(TAG, "    Address: %u, Size: %u, Factor: %u", coil.address, coil.size, coil.factor);
-    }
   }
 }
 
-request_data_type NibeGwCoilPoller::build_poll_request(PollGroup &group) {
+request_data_type NibeGwCoilPoller::build_read_request(PollGroup &group) {
   if (group.coil_indices.empty()) {
     return {};
   }
-  size_t count = std::min((size_t) MAX_COILS_PER_REQUEST, group.coil_indices.size());
 
-  std::vector<uint8_t> payload;
-  for (size_t i = 0; i < count; i++) {
-    size_t group_idx = (group.poll_offset + i) % group.coil_indices.size();
-    size_t coil_idx = group.coil_indices[group_idx];
-    uint16_t addr = coils_[coil_idx].address;
-    payload.push_back(addr & 0xFF);
-    payload.push_back((addr >> 8) & 0xFF);
-  }
+  // Send ONE coil address per request (Nibe protocol: MODBUS_READ_REQ = C0 69 02 addr_lo addr_hi checksum)
+  size_t coil_idx = group.coil_indices[group.poll_offset];
+  group.poll_offset = (group.poll_offset + 1) % group.coil_indices.size();
 
-  // Advance round-robin offset for next poll
-  group.poll_offset = (group.poll_offset + count) % group.coil_indices.size();
+  uint16_t addr = coils_[coil_idx].address;
+  ESP_LOGI(TAG, "Polling coil %u (group '%s')", addr, group.id.c_str());
 
-  // Build the packet: start, token, len, payload, checksum
   request_data_type packet;
   packet.push_back(STARTBYTE_SLAVE);
   packet.push_back(READ_TOKEN);
-  packet.push_back(payload.size());
-  for (auto b : payload) {
-    packet.push_back(b);
-  }
+  packet.push_back(0x02);  // length: 2 bytes (one address)
+  packet.push_back(addr & 0xFF);
+  packet.push_back((addr >> 8) & 0xFF);
 
   uint8_t checksum = 0;
   for (auto b : packet) {
@@ -138,35 +122,66 @@ request_data_type NibeGwCoilPoller::build_poll_request(PollGroup &group) {
   return packet;
 }
 
-void NibeGwCoilPoller::on_data_received(const request_data_type &data) {
+void NibeGwCoilPoller::on_data_msg_received(const request_data_type &data) {
+  // MODBUS_DATA_MSG (0x68): pump broadcast with 4-byte entries [addr_lo addr_hi val_lo val_hi]
+  ESP_LOGI(TAG, "Data broadcast received: %zu bytes", data.size());
   size_t offset = 0;
-  while (offset + 2 <= data.size()) {
+  while (offset + 4 <= data.size()) {
     uint16_t address = data[offset] | (data[offset + 1] << 8);
     offset += 2;
 
+    if (address == 0xFFFF) {
+      offset += 2;  // skip padding
+      continue;
+    }
+
     auto it = coil_index_.find(address);
     if (it == coil_index_.end()) {
-      // Unknown coil - skip 2 bytes (assume u16 default)
-      offset += 2;
+      offset += 2;  // skip 2-byte value for unknown coil
       continue;
     }
 
     auto &coil = coils_[it->second];
-    uint8_t bytes_needed = coil_data_bytes(coil.size);
 
-    if (offset + bytes_needed > data.size()) {
-      ESP_LOGW(TAG, "Truncated data for coil %u", address);
+    // Broadcast values are always 2 bytes
+    if (offset + 2 > data.size()) {
       break;
     }
 
     float value = decode_coil_value(&data[offset], coil.size, coil.factor);
-    offset += bytes_needed;
+    offset += 2;
 
-    ESP_LOGD(TAG, "Coil %u = %.2f", address, value);
-
+    ESP_LOGD(TAG, "Broadcast coil %u = %.2f", address, value);
     coil.callback(value);
     buffer_value(address, value);
   }
+}
+
+void NibeGwCoilPoller::on_read_response_received(const request_data_type &data) {
+  // MODBUS_READ_RESP (0x6A): response to our read request
+  // Format: [addr_lo addr_hi val_b0 val_b1 val_b2 val_b3] = 6 bytes
+  ESP_LOGI(TAG, "Read response received: %zu bytes", data.size());
+  if (data.size() < 6) {
+    ESP_LOGW(TAG, "Read response too short: %zu bytes", data.size());
+    return;
+  }
+
+  uint16_t address = data[0] | (data[1] << 8);
+
+  auto it = coil_index_.find(address);
+  if (it == coil_index_.end()) {
+    ESP_LOGD(TAG, "Read response for unknown coil %u", address);
+    return;
+  }
+
+  auto &coil = coils_[it->second];
+
+  // Read response always has 4 value bytes - decode based on coil size
+  float value = decode_coil_value(&data[2], coil.size, coil.factor);
+
+  ESP_LOGD(TAG, "Read response coil %u = %.2f", address, value);
+  coil.callback(value);
+  buffer_value(address, value);
 }
 
 float NibeGwCoilPoller::decode_coil_value(const uint8_t *data, CoilSize size, uint16_t factor) {
@@ -205,7 +220,7 @@ uint8_t NibeGwCoilPoller::coil_data_bytes(CoilSize size) {
   switch (size) {
     case COIL_SIZE_U8:
     case COIL_SIZE_S8:
-      return 2;  // Nibe pads u8/s8 to 2 bytes in the protocol
+      return 2;
     case COIL_SIZE_U16:
     case COIL_SIZE_S16:
       return 2;
@@ -227,7 +242,6 @@ void NibeGwCoilPoller::buffer_value(uint16_t address, float value) {
     return;
   }
 
-  // BUFFER_MODE_HISTORY
   if (history_buffer_.empty()) {
     return;
   }
