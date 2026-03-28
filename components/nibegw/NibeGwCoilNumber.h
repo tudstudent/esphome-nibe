@@ -38,6 +38,9 @@ class NibeGwCoilNumber : public number::Number, public Component {
   uint16_t factor_{1};
   std::string poll_group_{"default"};
 
+  // Initial read flag
+  bool needs_initial_read_{false};
+
   // Write state tracking
   bool write_pending_{false};
   float write_requested_value_{0};

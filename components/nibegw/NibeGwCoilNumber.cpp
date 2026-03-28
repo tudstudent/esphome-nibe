@@ -19,11 +19,18 @@ void NibeGwCoilNumber::setup() {
   poller_->register_coil(address_, static_cast<CoilSize>(coil_size_), factor_, poll_group_,
                          [this](float value) { this->publish_state(value); });
 
-  // Queue an immediate read to get the current value on startup
-  queue_read_request();
+  // Flag to read initial value on first loop iteration
+  needs_initial_read_ = true;
 }
 
 void NibeGwCoilNumber::loop() {
+  // Queue initial read once gateway is connected
+  if (needs_initial_read_ && millis() > 5000) {
+    needs_initial_read_ = false;
+    ESP_LOGD(TAG, "Queuing initial read for coil %u", address_);
+    queue_read_request();
+  }
+
   // Check for write timeout
   if (write_pending_ && (millis() - write_sent_at_ > WRITE_TIMEOUT_MS)) {
     ESP_LOGW(TAG, "Write timeout for coil %u", address_);
