@@ -12,6 +12,8 @@
 namespace esphome {
 namespace nibegw {
 
+class NibeGwCoilNumber;
+
 enum CoilSize : uint8_t {
   COIL_SIZE_U8 = 0,
   COIL_SIZE_U16 = 1,
@@ -60,6 +62,9 @@ class NibeGwCoilPoller : public Component {
   void register_coil(uint16_t address, CoilSize size, uint16_t factor,
                      const std::string &poll_group, std::function<void(float)> callback);
 
+  // Register a number entity for write response dispatch
+  void register_writable(NibeGwCoilNumber *number);
+
   void setup() override;
   void loop() override;
   void dump_config() override;
@@ -74,6 +79,7 @@ class NibeGwCoilPoller : public Component {
   request_data_type build_read_request(PollGroup &group);
   void on_data_msg_received(const request_data_type &data);
   void on_read_response_received(const request_data_type &data);
+  void on_write_response_received(const request_data_type &data);
   void buffer_value(uint16_t address, float value);
   void flush_buffer();
   bool is_mqtt_connected();
@@ -90,6 +96,9 @@ class NibeGwCoilPoller : public Component {
   std::map<uint16_t, size_t> coil_index_;
   std::vector<PollGroup> poll_groups_;
   std::map<std::string, size_t> poll_group_index_;
+
+  // Writable coil entities for write response dispatch
+  std::vector<NibeGwCoilNumber *> writable_numbers_;
 
   // Buffer for offline storage
   std::vector<BufferEntry> history_buffer_;

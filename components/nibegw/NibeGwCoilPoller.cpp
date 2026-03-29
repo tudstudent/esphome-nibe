@@ -1,4 +1,5 @@
 #include "NibeGwCoilPoller.h"
+#include "NibeGwCoilNumber.h"
 #include "NibeGw.h"
 #include "esphome/core/log.h"
 
@@ -29,6 +30,10 @@ void NibeGwCoilPoller::register_coil(uint16_t address, CoilSize size, uint16_t f
   poll_groups_[it->second].coil_indices.push_back(coil_idx);
 }
 
+void NibeGwCoilPoller::register_writable(NibeGwCoilNumber *number) {
+  writable_numbers_.push_back(number);
+}
+
 void NibeGwCoilPoller::setup() {
   if (buffer_mode_ == BUFFER_MODE_HISTORY && buffer_size_bytes_ > 0) {
     size_t capacity = buffer_size_bytes_ / sizeof(BufferEntry);
@@ -45,8 +50,12 @@ void NibeGwCoilPoller::setup() {
   gw_->add_listener(MODBUS40, MODBUS_READ_RESP,
                      [this](const request_data_type &data) { this->on_read_response_received(data); });
 
-  ESP_LOGI(TAG, "Coil poller set up with %zu coils in %zu poll groups",
-           coils_.size(), poll_groups_.size());
+  // Listen on MODBUS_WRITE_RESP (0x6C) - write confirmation from pump
+  gw_->add_listener(MODBUS40, MODBUS_WRITE_RESP,
+                     [this](const request_data_type &data) { this->on_write_response_received(data); });
+
+  ESP_LOGI(TAG, "Coil poller set up with %zu coils in %zu poll groups, %zu writable",
+           coils_.size(), poll_groups_.size(), writable_numbers_.size());
 }
 
 void NibeGwCoilPoller::loop() {
@@ -190,6 +199,18 @@ void NibeGwCoilPoller::on_read_response_received(const request_data_type &data) 
   ESP_LOGD(TAG, "Read response coil %u = %.2f", address, value);
   coil.callback(value);
   buffer_value(address, value);
+}
+
+void NibeGwCoilPoller::on_write_response_received(const request_data_type &data) {
+  // MODBUS_WRITE_RESP (0x6C): pump confirms or denies write
+  // Format after dedup: [result_byte] where 0x01 = success, 0x00 = denied
+  bool success = !data.empty() && data[0] != 0x00;
+  ESP_LOGD(TAG, "Write response: %s", success ? "OK" : "DENIED");
+
+  // Dispatch to all writable number entities with pending writes
+  for (auto *number : writable_numbers_) {
+    number->on_write_response(success);
+  }
 }
 
 float NibeGwCoilPoller::decode_coil_value(const uint8_t *data, CoilSize size, uint16_t factor) {
